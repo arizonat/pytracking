@@ -182,15 +182,21 @@ class Tracker:
         if tracker.params.visualization and self.visdom is None:
             self.visualize(image, init_info.get('init_bbox'))
 
-        start_time = time.time()
+        #start_time = time.time()
+        start_time = cv.getTickCount()
         out = tracker.initialize(image, init_info)
         if out is None:
             out = {}
 
         prev_output = OrderedDict(out)
 
+        # init_default = {'target_bbox': init_info.get('init_bbox'),
+        #                 'time': time.time() - start_time,
+        #                 'segmentation': init_info.get('init_mask'),
+        #                 'object_presence_score': 1.}
+
         init_default = {'target_bbox': init_info.get('init_bbox'),
-                        'time': time.time() - start_time,
+                        'time': (cv.getTickCount() - start_time)/cv.getTickFrequency(),
                         'segmentation': init_info.get('init_mask'),
                         'object_presence_score': 1.}
 
@@ -208,14 +214,16 @@ class Tracker:
 
             image = self._read_image(frame_path)
 
-            start_time = time.time()
+            #start_time = time.time()
+            start_time = cv.getTickCount()
 
             info = seq.frame_info(frame_num)
             info['previous_output'] = prev_output
 
             out = tracker.track(image, info)
             prev_output = OrderedDict(out)
-            _store_outputs(out, {'time': time.time() - start_time})
+            #_store_outputs(out, {'time': time.time() - start_time})
+            _store_outputs(out, {'time': (cv.getTickCount() - start_time)/cv.getTickFrequency()})
 
             segmentation = out['segmentation'] if 'segmentation' in out else None
             if self.visdom is not None:
