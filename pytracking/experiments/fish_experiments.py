@@ -16,8 +16,7 @@ def fish_test():
     return trackers, dataset
 
 def older_fish_test():
-    trackers = trackerlist('kys', 'default', range(5)) + \
-               trackerlist('dimp', 'dimp50', range(5)) + \
+    trackers = trackerlist('dimp', 'dimp50', range(5)) + \
                trackerlist('eco', 'default', range(5))
     dataset = get_dataset('fish')
     return trackers, dataset
