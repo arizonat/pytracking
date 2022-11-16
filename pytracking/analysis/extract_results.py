@@ -101,7 +101,7 @@ def calc_seq_err_robust(pred_bb, anno_bb, dataset, target_visible=None):
 
 
 def extract_results(trackers, dataset, report_name, skip_missing_seq=False, plot_bin_gap=0.05,
-                    exclude_invalid_frames=False):
+                    exclude_invalid_frames=False, extract_frame_rates=True):
     settings = env_settings()
     eps = 1e-16
 
@@ -122,6 +122,8 @@ def extract_results(trackers, dataset, report_name, skip_missing_seq=False, plot
     ave_success_rate_plot_center_norm = torch.zeros((len(dataset), len(trackers), threshold_set_center.numel()),
                                                     dtype=torch.float32)
 
+    ave_frame_rate = torch.zeros((len(dataset), len(trackers)), dtype=torch.float32)
+
     valid_sequence = torch.ones(len(dataset), dtype=torch.uint8)
 
     for seq_id, seq in enumerate(tqdm(dataset)):
@@ -133,6 +135,8 @@ def extract_results(trackers, dataset, report_name, skip_missing_seq=False, plot
             base_results_path = '{}/{}'.format(trk.results_dir, seq.name)
             results_path = '{}.txt'.format(base_results_path)
 
+            time_path = '{}_time.txt'.format(base_results_path)
+            
             if os.path.isfile(results_path):
                 pred_bb = torch.tensor(load_text(str(results_path), delimiter=('\t', ','), dtype=np.float64))
             else:
@@ -141,6 +145,16 @@ def extract_results(trackers, dataset, report_name, skip_missing_seq=False, plot
                     break
                 else:
                     raise Exception('Result not found. {}'.format(results_path))
+                
+            if extract_frame_rates and os.path.isfile(time_path):
+                frame_durations = torch.tensor(load_text(str(time_path), delimiter=('\t', ','), dtype=np.float64))
+            elif extract_frame_rates:
+                if skip_missing_seq:
+                    valid_sequence[seq_id] = 0
+                    break
+                else:
+                    raise Exception('Result not found. {}'.format(time_path))
+            
 
             # Calculate measures
             err_overlap, err_center, err_center_normalized, valid_frame = calc_seq_err_robust(
@@ -160,6 +174,8 @@ def extract_results(trackers, dataset, report_name, skip_missing_seq=False, plot
             ave_success_rate_plot_center[seq_id, trk_id, :] = (err_center.view(-1, 1) <= threshold_set_center.view(1, -1)).sum(0).float() / seq_length
             ave_success_rate_plot_center_norm[seq_id, trk_id, :] = (err_center_normalized.view(-1, 1) <= threshold_set_center_norm.view(1, -1)).sum(0).float() / seq_length
 
+            ave_frame_rate[seq_id, trk_id] = 1/frame_durations.mean()
+
     print('\n\nComputed results over {} / {} sequences'.format(valid_sequence.long().sum().item(), valid_sequence.shape[0]))
 
     # Prepare dictionary for saving data
@@ -175,7 +191,8 @@ def extract_results(trackers, dataset, report_name, skip_missing_seq=False, plot
                  'avg_overlap_all': avg_overlap_all.tolist(),
                  'threshold_set_overlap': threshold_set_overlap.tolist(),
                  'threshold_set_center': threshold_set_center.tolist(),
-                 'threshold_set_center_norm': threshold_set_center_norm.tolist()}
+                 'threshold_set_center_norm': threshold_set_center_norm.tolist(),
+                 'ave_frame_rate': ave_frame_rate.tolist()}
 
     with open(result_plot_path + '/eval_data.pkl', 'wb') as fh:
         pickle.dump(eval_data, fh)

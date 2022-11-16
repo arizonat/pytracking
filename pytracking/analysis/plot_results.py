@@ -7,6 +7,7 @@ import pickle
 import json
 from pytracking.evaluation.environment import env_settings
 from pytracking.analysis.extract_results import extract_results
+import numpy as np
 
 
 def get_plot_draw_styles():
@@ -48,11 +49,17 @@ def merge_multiple_runs(eval_data):
     ave_success_rate_plot_center_merged = []
     ave_success_rate_plot_center_norm_merged = []
     avg_overlap_all_merged = []
+    ave_frame_rate_merged = []
 
     ave_success_rate_plot_overlap = torch.tensor(eval_data['ave_success_rate_plot_overlap'])
     ave_success_rate_plot_center = torch.tensor(eval_data['ave_success_rate_plot_center'])
     ave_success_rate_plot_center_norm = torch.tensor(eval_data['ave_success_rate_plot_center_norm'])
     avg_overlap_all = torch.tensor(eval_data['avg_overlap_all'])
+
+    frame_rate_included = False
+    if 'ave_frame_rate' in eval_data:
+        ave_frame_rate = torch.tensor(eval_data['ave_frame_rate'])
+        frame_rate_included = True
 
     trackers = eval_data['trackers']
     merged = torch.zeros(len(trackers), dtype=torch.uint8)
@@ -69,6 +76,9 @@ def merge_multiple_runs(eval_data):
         ave_success_rate_plot_center_merged.append(ave_success_rate_plot_center[:, match, :].mean(1))
         ave_success_rate_plot_center_norm_merged.append(ave_success_rate_plot_center_norm[:, match, :].mean(1))
         avg_overlap_all_merged.append(avg_overlap_all[:, match].mean(1))
+        
+        if frame_rate_included:
+            ave_frame_rate_merged.append(ave_frame_rate[:, match].mean(1))
 
         merged[match] = 1
 
@@ -76,12 +86,18 @@ def merge_multiple_runs(eval_data):
     ave_success_rate_plot_center_merged = torch.stack(ave_success_rate_plot_center_merged, dim=1)
     ave_success_rate_plot_center_norm_merged = torch.stack(ave_success_rate_plot_center_norm_merged, dim=1)
     avg_overlap_all_merged = torch.stack(avg_overlap_all_merged, dim=1)
+    
+    if frame_rate_included:
+        ave_frame_rate_merged = torch.stack(ave_frame_rate_merged, dim=1)
 
     eval_data['trackers'] = new_tracker_names
     eval_data['ave_success_rate_plot_overlap'] = ave_success_rate_plot_overlap_merged.tolist()
     eval_data['ave_success_rate_plot_center'] = ave_success_rate_plot_center_merged.tolist()
     eval_data['ave_success_rate_plot_center_norm'] = ave_success_rate_plot_center_norm_merged.tolist()
     eval_data['avg_overlap_all'] = avg_overlap_all_merged.tolist()
+
+    if frame_rate_included:
+        eval_data['ave_frame_rate'] = ave_frame_rate_merged.tolist()
 
     return eval_data
 
@@ -99,12 +115,12 @@ def get_tracker_display_name(tracker):
     return  disp_name
 
 
-def plot_draw_save(y, x, scores, trackers, plot_draw_styles, result_plot_path, plot_opts):
+def plot_draw_save(y, x, scores, trackers, plot_draw_styles, result_plot_path, plot_opts, dataset_filename=None):
     # Plot settings
-    font_size = plot_opts.get('font_size', 12)
-    font_size_axis = plot_opts.get('font_size_axis', 13)
+    font_size = plot_opts.get('font_size', 24)
+    font_size_axis = plot_opts.get('font_size_axis', 28)
     line_width = plot_opts.get('line_width', 2)
-    font_size_legend = plot_opts.get('font_size_legend', 13)
+    font_size_legend = plot_opts.get('font_size_legend', 16)
 
     plot_type = plot_opts['plot_type']
     legend_loc = plot_opts['legend_loc']
@@ -154,6 +170,8 @@ def plot_draw_save(y, x, scores, trackers, plot_draw_styles, result_plot_path, p
 
     tikzplotlib.save('{}/{}_plot.tex'.format(result_plot_path, plot_type))
     fig.savefig('{}/{}_plot.pdf'.format(result_plot_path, plot_type), dpi=300, format='pdf', transparent=True)
+    if not dataset_filename is None:
+        fig.savefig('{}/{}_{}_plot.png'.format(result_plot_path, plot_type, dataset_filename), dpi=300, format='png', transparent=False)
     plt.draw()
 
 
@@ -201,7 +219,7 @@ def get_prec_curve(ave_success_rate_plot_center, valid_sequence):
 
 
 def plot_results(trackers, dataset, report_name, merge_results=False,
-                 plot_types=('success'), force_evaluation=False, **kwargs):
+                 plot_types=('success'), force_evaluation=False, dataset_title="", dataset_filename=None, **kwargs):
     """
     Plot results for the given trackers
 
@@ -243,8 +261,8 @@ def plot_results(trackers, dataset, report_name, merge_results=False,
         threshold_set_overlap = torch.tensor(eval_data['threshold_set_overlap'])
 
         success_plot_opts = {'plot_type': 'success', 'legend_loc': 'lower left', 'xlabel': 'Overlap threshold',
-                             'ylabel': 'Overlap Precision [%]', 'xlim': (0, 1.0), 'ylim': (0, 100), 'title': 'Success plot'}
-        plot_draw_save(auc_curve, threshold_set_overlap, auc, tracker_names, plot_draw_styles, result_plot_path, success_plot_opts)
+                             'ylabel': 'Overlap Precision [%]', 'xlim': (0, 1.0), 'ylim': (0, 100), 'title': 'Success plot' + f" {dataset_title}"}
+        plot_draw_save(auc_curve, threshold_set_overlap, auc, tracker_names, plot_draw_styles, result_plot_path, success_plot_opts, dataset_filename)
 
     # ********************************  Precision Plot **************************************
     if 'prec' in plot_types:
@@ -256,9 +274,9 @@ def plot_results(trackers, dataset, report_name, merge_results=False,
 
         precision_plot_opts = {'plot_type': 'precision', 'legend_loc': 'lower right',
                                'xlabel': 'Location error threshold [pixels]', 'ylabel': 'Distance Precision [%]',
-                               'xlim': (0, 50), 'ylim': (0, 100), 'title': 'Precision plot'}
+                               'xlim': (0, 50), 'ylim': (0, 100), 'title': 'Precision plot' + f" {dataset_title}"}
         plot_draw_save(prec_curve, threshold_set_center, prec_score, tracker_names, plot_draw_styles, result_plot_path,
-                       precision_plot_opts)
+                       precision_plot_opts, dataset_filename)
 
     # ********************************  Norm Precision Plot **************************************
     if 'norm_prec' in plot_types:
@@ -270,10 +288,60 @@ def plot_results(trackers, dataset, report_name, merge_results=False,
 
         norm_precision_plot_opts = {'plot_type': 'norm_precision', 'legend_loc': 'lower right',
                                     'xlabel': 'Location error threshold', 'ylabel': 'Distance Precision [%]',
-                                    'xlim': (0, 0.5), 'ylim': (0, 100), 'title': 'Normalized Precision plot'}
+                                    'xlim': (0, 0.5), 'ylim': (0, 100), 'title': 'Normalized Precision plot' + f" {dataset_title}"}
         plot_draw_save(prec_curve, threshold_set_center_norm, prec_score, tracker_names, plot_draw_styles, result_plot_path,
-                       norm_precision_plot_opts)
+                       norm_precision_plot_opts, dataset_filename)
 
+    if 'frame_rate' in plot_types:
+        ave_frame_rate =  torch.tensor(eval_data['ave_frame_rate'])
+        ave_frame_rate = ave_frame_rate.mean(0).squeeze()
+
+        names = [t['disp_name'] for t in tracker_names]
+        print(names)
+        print(ave_frame_rate)
+        plt.bar(names, ave_frame_rate)
+        plt.title("FPS plot " + f" {dataset_title}")
+
+    if 'fps_vs_auc' in plot_types:
+        ave_frame_rate =  torch.tensor(eval_data['ave_frame_rate'])
+        ave_frame_rate = ave_frame_rate.mean(0).squeeze()
+
+        ave_success_rate_plot_overlap = torch.tensor(eval_data['ave_success_rate_plot_overlap'])
+
+        # Index out valid sequences
+        auc_curve, auc = get_auc_curve(ave_success_rate_plot_overlap, valid_sequence)
+        threshold_set_overlap = torch.tensor(eval_data['threshold_set_overlap'])
+
+        names = np.array([t['disp_name'] for t in tracker_names])
+
+        # Sort by AUV
+        index_sort = auc.argsort()
+        auc = auc[index_sort]
+        ave_frame_rate = ave_frame_rate[index_sort]
+        names = names[index_sort]
+
+        draw_styles = get_plot_draw_styles()
+
+        plot_type = "fps_v_auc"
+        matplotlib.rcParams.update({'font.size': 24})
+        matplotlib.rcParams.update({'axes.titlesize': 28})
+        matplotlib.rcParams.update({'axes.titleweight': 'black'})
+        matplotlib.rcParams.update({'axes.labelsize': 28})
+        
+        ax1 = plt.subplot()
+        l1, = ax1.plot(auc, color=draw_styles[0]['color'])
+        ax2 = ax1.twinx()
+        l2, = ax2.plot(ave_frame_rate, color=draw_styles[2]['color'])
+        ax1.set_xticks(np.arange(len(names)))
+        ax1.set_xticklabels(names)
+        ax1.set_title("FPS vs. AUC" + f" {dataset_title}")
+        ax1.set_xlabel("Tracker")
+        ax1.set_ylabel("AUC score")
+        ax2.set_ylabel("FPS")
+        plt.legend([l1, l2], ["AUC", "FPS"])
+        
+        plt.savefig('{}/{}_{}_plot.png'.format(result_plot_path, plot_type, dataset_filename), dpi=300, format='png', transparent=False)
+        
     plt.show()
 
 
