@@ -8,6 +8,7 @@ pt = "pytracking.evaluation.%sdataset"  # Useful abbreviations to reduce the clu
 
 dataset_dict = dict(
     otb=DatasetInfo(module=pt % "otb", class_name="OTBDataset", kwargs=dict()),
+    fish=DatasetInfo(module=pt % "fish", class_name="FishDataset", kwargs=dict()),
     nfs=DatasetInfo(module=pt % "nfs", class_name="NFSDataset", kwargs=dict()),
     uav=DatasetInfo(module=pt % "uav", class_name="UAVDataset", kwargs=dict()),
     tpl=DatasetInfo(module=pt % "tpl", class_name="TPLDataset", kwargs=dict()),
